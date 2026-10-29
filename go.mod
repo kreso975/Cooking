@@ -5,6 +5,8 @@ go 1.27.1
 require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/uuid v1.6.0
+	github.com/phpdave11/gofpdf v1.4.3
+	golang.org/x/image v0.47.0
 	modernc.org/sqlite v1.61.0
 )
 

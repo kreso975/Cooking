@@ -18,6 +18,29 @@ body {
     border: 1px solid rgba(63, 63, 70, 0.5);
 }
 
+.pdf-download-icon {
+    color: rgb(192 132 252);
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.recipe-card-pdf-link {
+    margin-left: auto;
+    color: rgb(244 244 245);
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.recipe-card-pdf-link:hover {
+    color: white;
+}
+
+.recipe-card-pdf-link:focus-visible {
+    border-radius: 0.25rem;
+    outline: 2px solid rgb(192 132 252);
+    outline-offset: 2px;
+}
+
 /* Smooth scroll for recipe lists */
 html {
     scroll-behavior: smooth;

@@ -131,10 +131,15 @@ function renderRecipes(recipes) {
                 </span>
             </div>
             <h3 class="text-xl font-bold mb-1">${recipe.title}</h3>
-            <div class="text-sm text-zinc-400 mb-4 flex flex-wrap gap-x-3 gap-y-1">
+            <div class="text-sm text-zinc-400 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span>⏱ ${recipe.prep_time}</span>
                 <span>🔥 ${recipe.cook_time}</span>
                 <span>👥 ${recipe.servings}</span>
+                <a href="${BASE_URL}/api/recipes/${encodeURIComponent(recipe.id)}/pdf"
+                   download="${recipe.slug || 'recipe'}.pdf"
+                   class="recipe-card-pdf-link"
+                   aria-label="Download recipe as PDF"
+                   title="Download recipe as PDF">📄︎</a>
             </div>
             <button onclick="viewRecipe('${recipe.slug}')" class="mt-auto w-full py-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition text-orange-400 font-bold">View Details</button>
         `;
@@ -168,6 +173,9 @@ async function viewRecipe(slug, { replaceHistory = false, updateHistory = true }
 
         // Populate UI
         document.getElementById('detail-title').innerText = currentRecipeData.title;
+        const pdfLink = document.getElementById('download-recipe-pdf');
+        pdfLink.href = `${BASE_URL}/api/recipes/${encodeURIComponent(currentRecipeData.id)}/pdf`;
+        pdfLink.download = `${currentRecipeData.slug || 'recipe'}.pdf`;
         document.getElementById('detail-category').innerText = `Category: ${currentRecipeData.category}`;
         document.getElementById('detail-prep').innerText = currentRecipeData.prep_time;
         document.getElementById('detail-cook').innerText = currentRecipeData.cook_time;

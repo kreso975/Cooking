@@ -65,7 +65,12 @@
                     <div>
                         <img id="detail-image" src="" class="w-full h-auto rounded-xl mb-6 border border-zinc-800" alt="Recipe Image">
                         <div class="space-y-4">
-                            <h3 id="detail-title" class="text-3xl font-bold text-orange-400"></h3>
+                            <div class="flex items-center gap-2">
+                                <h3 id="detail-title" class="min-w-0 break-words text-3xl font-bold text-orange-400"></h3>
+                                <a id="download-recipe-pdf" href="#" download class="shrink-0 rounded-lg p-2 text-orange-400 hover:bg-zinc-800 hover:text-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500" aria-label="Download recipe as PDF" title="Download recipe as PDF">
+                                    <span class="pdf-download-icon" aria-hidden="true">📄︎</span>
+                                </a>
+                            </div>
                             <p id="detail-category" class="text-zinc-400 italic"></p>
                             <div class="grid grid-cols-2 gap-4 text-sm">
                                 <div class="bg-zinc-800 p-3 rounded-lg"><span class="text-zinc-500">Prep:</span> <span id="detail-prep" class="font-bold"></span></div>

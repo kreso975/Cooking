@@ -1,4 +1,4 @@
-// $env:GOOS="linux"; $env:GOARCH="amd64"; $env:CGO_ENABLED = "0"; go build -ldflags="-s -w" -trimpath -o app/homeCookingServer main.go
+// $env:GOOS="linux"; $env:GOARCH="amd64"; $env:CGO_ENABLED="0"; go build -ldflags="-s -w" -trimpath -o app/homeCookingServer .
 
 package main
 
@@ -79,6 +79,7 @@ func main() {
 
 	r.Get("/api/recipes", getRecipes)
 	r.Get("/api/recipes/slug/{slug}", getRecipeBySlug)
+	r.Get("/api/recipes/{id}/pdf", downloadRecipePDF)
 	r.Get("/api/recipes/{id}", getRecipe)
 	r.Post("/api/recipes", createRecipe)
 	r.Put("/api/recipes/{id}", updateRecipe)
