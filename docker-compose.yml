@@ -1,0 +1,17 @@
+services:
+  checker:
+    image: busybox:latest
+    container_name: homecook
+    restart: always
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /share/Container/HomeCook:/app
+    dns:
+      - 192.168.1.53
+      - 1.1.1.1
+    environment:
+      PORT: "8075"
+      DNS: "192.168.1.53"
+      WWW_DIR: "/app/www"
+    entrypoint: ["/app/entrypoint.sh"]

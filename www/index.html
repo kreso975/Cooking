@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>Home Cook | Intranet</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="/css/tailwind.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/img/favicon-16x16.png">
+    <link rel="manifest" href="/img/site.webmanifest">
+</head>
+<body class="text-zinc-100 min-h-screen flex flex-col bg-zinc-950">
+    <div id="notifications" class="notification-stack" aria-live="polite" aria-relevant="additions"></div>
+    <dialog id="delete-confirmation" class="confirmation-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-message">
+        <div class="confirmation-dialog-content">
+            <div class="confirmation-dialog-icon" aria-hidden="true">!</div>
+            <h2 id="delete-dialog-title" class="text-xl font-bold text-white">Delete recipe?</h2>
+            <p id="delete-dialog-message" class="mt-2 text-sm text-zinc-400"></p>
+            <div class="mt-6 flex justify-end gap-3">
+                <form method="dialog">
+                    <button class="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-200 hover:bg-zinc-700 transition">Cancel</button>
+                </form>
+                <button id="confirm-delete-button" type="button" onclick="confirmDeleteRecipe()" class="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 transition">Delete recipe</button>
+            </div>
+        </div>
+    </dialog>
+    <!-- Navigation -->
+    <nav class="border-b border-zinc-800 p-4 flex justify-between items-center bg-black/40 backdrop-blur-md sticky top-0 z-50">
+        <a href="/" class="flex items-center gap-2 cursor-pointer">
+            <span class="text-2xl">🍳</span>
+            <h1 class="text-xl font-bold bg-gradient-to-r from-orange-500 to-orange-300 bg-clip-text text-transparent">Home Cook</h1>
+        </a>
+        <div class="flex gap-2">
+            <button onclick="switchMode('browse')" id="btn-browse" class="px-4 py-2 rounded-lg transition-all duration-200 bg-orange-600 hover:bg-orange-700">Browse</button>
+            <button onclick="switchMode('form')" id="btn-add" class="px-4 py-2 rounded-lg transition-all duration-200 bg-zinc-800 hover:bg-zinc-700">Add Recipe</button>
+        </div>
+    </nav>
+
+    <main id="app" class="flex-1 max-w-6xl mx-auto w-full p-6">
+        
+        <!-- 1. Gallery View (Browse) -->
+        <div id="view-browse" class="block">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+                <h2 class="text-3xl font-bold">Explore Recipes</h2>
+                <div class="relative w-full md:w-96">
+                    <input type="text" id="search-input" placeholder="Search recipes..." 
+                           class="w-full bg-zinc-900 border border-zinc-800 p-3 pl-10 rounded-xl focus:outline-none focus:border-orange-500 transition-colors">
+                    <span class="absolute left-3 top-3.5 text-zinc-500">🔍</span>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8" id="recipes-grid">
+                <!-- Recipe cards loaded by JS -->
+            </div>
+        </div>
+
+        <!-- 2. Detail View (Viewing a single recipe) -->
+        <div id="view-detail" class="hidden max-w-4xl mx-auto">
+            <button onclick="switchMode('browse')" class="mb-4 text-orange-500 hover:underline">← Back to Gallery</button>
+            <div class="glass p-8 rounded-2xl shadow-2xl border border-zinc-700">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <img id="detail-image" src="" class="w-full h-auto rounded-xl mb-6 border border-zinc-800" alt="Recipe Image">
+                        <div class="space-y-4">
+                            <h3 id="detail-title" class="text-3xl font-bold text-orange-400"></h3>
+                            <p id="detail-category" class="text-zinc-400 italic"></p>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div class="bg-zinc-800 p-3 rounded-lg"><span class="text-zinc-500">Prep:</span> <span id="detail-prep" class="font-bold"></span></div>
+                                <div class="bg-zinc-800 p-3 rounded-lg"><span class="text-zinc-500">Cook:</span> <span id="detail-cook" class="font-bold"></span></div>
+                                <div class="bg-zinc-800 p-3 rounded-lg col-span-2"><span class="text-zinc-500">Servings:</span> <span id="detail-servings" class="font-bold"></span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-xl font-bold mb-4 text-white">Ingredients</h4>
+                        <ul id="detail-ingredients" class="list-disc pl-5 space-y-2 text-zinc-300"></ul>
+                        <h4 class="text-xl font-bold mb-4 mt-8 text-white">Instructions</h4>
+                        <div id="detail-steps" class="text-zinc-300 leading-relaxed space-y-4"></div>
+                    </div>
+                </div>
+                <div class="flex gap-4 mt-8 pt-6 border-t border-zinc-800">
+                    <button id="btn-edit-detail" onclick="openEditMode()" class="px-6 py-2 bg-orange-600 rounded-lg font-bold hover:bg-orange-700 transition">Edit Recipe</button>
+                    <button id="btn-delete-detail" onclick="deleteRecipe()" class="px-6 py-2 bg-red-600/20 text-red-500 border border-red-600/40 rounded-lg hover:bg-red-600 hover:text-white transition">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Form View (Add / Edit) -->
+        <div id="view-form" class="hidden max-w-3xl mx-auto">
+            <div class="glass p-8 rounded-2xl shadow-2xl border border-zinc-700">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold" id="form-title">Create New Recipe</h2>
+                    <button onclick="closeForm()" class="text-zinc-400 hover:text-white">✕ Close</button>
+                </div>
+                <form id="recipe-form" class="space-y-5">
+                    <input type="hidden" id="recipe-id">
+                    <div class="recipe-form-grid grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="col-span-2">
+                            <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">Recipe Title</label>
+                            <input type="text" id="title" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg focus:border-orange-500 outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">URL Slug</label>
+                            <input type="text" id="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Use lowercase letters, numbers, and single hyphens." placeholder="chicken-noodle-soup" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg focus:border-orange-500 outline-none" required>
+                            <p class="mt-1 text-xs text-zinc-500">Used in the recipe URL. Generated from the title; you can edit it.</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">Category</label>
+                            <input type="text" id="category" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg focus:border-orange-500 outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">Prep Time</label>
+                            <input type="text" id="prep_time" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg focus:border-orange-500 outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">Cook Time</label>
+                            <input type="text" id="cook_time" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg focus:border-orange-500 outline-none" required>
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">Servings</label>
+                            <input type="number" id="servings" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg focus:border-orange-500 outline-none" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">Ingredients</label>
+                        <textarea id="ingredients" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg h-32 focus:border-orange-500 outline-none" placeholder="List ingredients here..." required></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-zinc-400 uppercase mb-1">Instructions</label>
+                        <textarea id="steps" class="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg h-32 focus:border-orange-500 outline-none" placeholder="Step-by-step guide..." required></textarea>
+                    </div>
+                    <div id="image-drop-zone" class="image-drop-zone bg-zinc-900/50 p-4 rounded-xl border border-dashed border-zinc-700">
+                        <label for="image-input" class="block text-xs font-medium text-zinc-400 uppercase mb-2">Recipe Image</label>
+                        <input type="file" id="image-input" accept="image/*" class="block w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-orange-600 file:text-white">
+                        <p class="mt-2 text-xs text-zinc-500">Or drag and drop an image here.</p>
+                        <div id="preview" class="mt-4 h-32 w-32 border border-zinc-800 rounded-lg flex items-center justify-center overflow-hidden bg-zinc-950">
+                            <span class="text-zinc-600 text-xs">No preview</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-4 pt-4">
+                        <button type="submit" class="flex-1 bg-orange-600 py-3 rounded-xl font-bold hover:bg-orange-700 transition-all shadow-lg shadow-orange-900/20">Save Recipe</button>
+                        <button type="button" onclick="closeForm()" class="px-6 py-3 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="p-6 text-center text-zinc-500 text-sm border-t border-zinc-900">
+        &copy; <span id="current-year"></span> Home Cook Intranet. Built with Go & SQLite.
+    </footer>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
