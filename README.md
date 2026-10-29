@@ -3,6 +3,20 @@
 ## AI
 this is almost entire Vibe coding project(I had to test it)
 
+## Screenshots
+
+### Home page
+
+![Home page](Docs/img/home-browse.png)
+
+### View recipe
+
+![View recipe](Docs/img/view-recepie.png)
+
+### Add recipe
+
+![Add recipe](Docs/img/add-recepie.png)
+
 ## Configuration
 
 | Environment Variable | Default | Description |
