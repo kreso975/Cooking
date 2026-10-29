@@ -1,6 +1,7 @@
 # Home Cook
 
-
+## AI
+this is almost entire Vibe coding project(I had to test it)
 
 ## Configuration
 
