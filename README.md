@@ -1,5 +1,7 @@
 # Home Cook
 
+Home Cook is a small and fast home cooking recipe repository built for simplicity. No fancy features, just everyday notes for your own recipes. Keep your recipes organized, easy to find, and simple to maintain. Designed for people who prefer writing recipes over managing software.
+
 ## AI
 this is almost entire Vibe coding project(I had to test it)
 
