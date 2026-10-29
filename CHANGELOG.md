@@ -1,4 +1,8 @@
-## v0.0.2 - Ongoing
+## v0.0.3 - Ongoing
+- Added a footer link to export all recipes as one alphabetically ordered cookbook PDF with a cover page.
+- Corrected EXIF orientation for JPEG images when embedding them in PDFs.
+
+## v0.0.2
 - Added recipe PDF generation and a download endpoint in the Go server.
 - Added PDF download links to recipe cards and the recipe detail view.
 - Styled PDFs with Home Cook branding, a compact recipe title banner, recipe image, and prep time, cook time, and servings cards.

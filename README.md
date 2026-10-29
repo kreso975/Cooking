@@ -19,6 +19,16 @@ this is almost entire Vibe coding project(I had to test it)
 
 ![Add recipe](Docs/img/add-recepie.png)
 
+## PDF exports
+
+Download an individual recipe as a PDF using the PDF icon on a recipe card or
+next to the title in the recipe detail view. PDFs include the recipe image,
+preparation and cooking times, servings, ingredients, and instructions.
+
+Use **Export cookbook PDF** in the page footer to download all recipes together
+as one cookbook. The cookbook has a cover page and lists recipes alphabetically
+by title. Recipe images are oriented using their EXIF metadata when needed.
+
 ## Configuration
 
 | Environment Variable | Default | Description |
@@ -50,7 +60,7 @@ The SQLite driver is pure Go, so no C compiler or CGO setup is needed. To build
 the Linux/amd64 executable from Windows PowerShell:
 
 ```powershell
-$env:GOOS="linux"; $env:GOARCH="amd64"; $env:CGO_ENABLED = "0"; go build -ldflags="-s -w" -trimpath -o app/homeCookingServer main.go
+$env:GOOS="linux"; $env:GOARCH="amd64"; $env:CGO_ENABLED = "0"; go build -ldflags="-s -w" -trimpath -o app/homeCookingServer .
 ```
 
 To build a Windows executable instead:
@@ -58,10 +68,15 @@ To build a Windows executable instead:
 ```powershell
 $env:GOOS = "windows"
 $env:GOARCH = "amd64"
-go build -ldflags="-s -w" -trimpath -o app/homeCookingServer.exe main.go
+go build -ldflags="-s -w" -trimpath -o app/homeCookingServer.exe .
 ```
 
 ## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/recipes/{id}/pdf` | Download a recipe as a PDF |
+| `GET` | `/api/cookbook.pdf` | Download all recipes as one cookbook PDF |
 
 ## Docker Deployment
 

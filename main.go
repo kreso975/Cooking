@@ -78,6 +78,7 @@ func main() {
 	r.Handle("/www/*", http.StripPrefix("/www", fs))
 
 	r.Get("/api/recipes", getRecipes)
+	r.Get("/api/cookbook.pdf", downloadCookbookPDF)
 	r.Get("/api/recipes/slug/{slug}", getRecipeBySlug)
 	r.Get("/api/recipes/{id}/pdf", downloadRecipePDF)
 	r.Get("/api/recipes/{id}", getRecipe)

@@ -41,6 +41,18 @@ body {
     outline-offset: 2px;
 }
 
+.cookbook-export-link {
+    display: inline-block;
+    margin-left: 0.75rem;
+    color: rgb(251 146 60);
+}
+
+.cookbook-export-link:hover,
+.cookbook-export-link:focus-visible {
+    color: rgb(253 186 116);
+    text-decoration: underline;
+}
+
 /* Smooth scroll for recipe lists */
 html {
     scroll-behavior: smooth;

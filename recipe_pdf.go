@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
-	_ "image/jpeg"
+	"image/jpeg"
 	_ "image/png"
 	"log"
 	"math"
@@ -70,7 +72,88 @@ func downloadRecipePDF(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func downloadCookbookPDF(w http.ResponseWriter, r *http.Request) {
+	recipes, err := loadRecipesForCookbook(r.Context())
+	if err != nil {
+		log.Printf("Error loading recipes for cookbook PDF: %v", err)
+		http.Error(w, "Unable to load recipes", http.StatusInternalServerError)
+		return
+	}
+
+	pdfBytes, err := generateCookbookPDF(recipes)
+	if err != nil {
+		log.Printf("Error generating cookbook PDF: %v", err)
+		http.Error(w, "Unable to generate cookbook PDF", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", `attachment; filename="home-cook-recipe-book.pdf"`)
+	w.Header().Set("Content-Length", fmt.Sprint(len(pdfBytes)))
+	w.Header().Set("Cache-Control", "private, no-store")
+	if _, err := w.Write(pdfBytes); err != nil {
+		log.Printf("Error writing cookbook PDF: %v", err)
+	}
+}
+
+func loadRecipesForCookbook(ctx context.Context) ([]Recipe, error) {
+	rows, err := db.QueryContext(
+		ctx,
+		"SELECT id, title, slug, category, prep_time, cook_time, servings, ingredients, steps, image_url FROM recipes ORDER BY title COLLATE NOCASE, slug COLLATE NOCASE, id",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	recipes := make([]Recipe, 0)
+	for rows.Next() {
+		var recipe Recipe
+		if err := rows.Scan(
+			&recipe.ID,
+			&recipe.Title,
+			&recipe.Slug,
+			&recipe.Category,
+			&recipe.PrepTime,
+			&recipe.CookTime,
+			&recipe.Servings,
+			&recipe.Ingredients,
+			&recipe.Steps,
+			&recipe.ImageURL,
+		); err != nil {
+			return nil, err
+		}
+		recipes = append(recipes, recipe)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return recipes, nil
+}
+
 func generateRecipePDF(recipe Recipe) ([]byte, error) {
+	pdf := newRecipePDF()
+	pdf.AddPage()
+	if err := renderRecipePDFPage(pdf, recipe); err != nil {
+		return nil, err
+	}
+	return encodeRecipePDF(pdf)
+}
+
+func generateCookbookPDF(recipes []Recipe) ([]byte, error) {
+	pdf := newRecipePDF()
+	pdf.AddPage()
+	writePDFCover(pdf, len(recipes))
+	for _, recipe := range recipes {
+		pdf.AddPage()
+		if err := renderRecipePDFPage(pdf, recipe); err != nil {
+			return nil, fmt.Errorf("render recipe %q: %w", recipe.ID, err)
+		}
+	}
+	return encodeRecipePDF(pdf)
+}
+
+func newRecipePDF() *gofpdf.Fpdf {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetDisplayMode("real", "continuous")
 	pdf.SetMargins(16, 16, 16)
@@ -86,8 +169,37 @@ func generateRecipePDF(recipe Recipe) ([]byte, error) {
 		pdf.SetTextColor(113, 113, 122)
 		pdf.CellFormat(0, 6, fmt.Sprintf("HOME COOK  ·  PAGE %d", pdf.PageNo()), "", 0, "C", false, 0, "")
 	})
-	pdf.AddPage()
+	return pdf
+}
 
+func writePDFCover(pdf *gofpdf.Fpdf, recipeCount int) {
+	drawPDFBrand(pdf, 16, 8)
+	pdf.SetFont("GoSans", "B", 30)
+	pdf.SetTextColor(39, 39, 42)
+	pdf.SetXY(16, 105)
+	pdf.CellFormat(178, 14, "Recipe Book", "", 0, "C", false, 0, "")
+
+	pdf.SetFont("GoSans", "", 13)
+	pdf.SetTextColor(113, 113, 122)
+	pdf.SetXY(16, 124)
+	pdf.CellFormat(178, 8, "Home Cook recipes, collected in one place", "", 0, "C", false, 0, "")
+
+	pdf.SetDrawColor(249, 115, 22)
+	pdf.SetLineWidth(1)
+	pdf.Line(76, 139, 134, 139)
+	pdf.SetFont("GoSans", "B", 10)
+	pdf.SetTextColor(234, 88, 12)
+	pdf.SetXY(16, 146)
+	pdf.CellFormat(178, 7, fmt.Sprintf("%d RECIPES", recipeCount), "", 0, "C", false, 0, "")
+	if recipeCount == 0 {
+		pdf.SetFont("GoSans", "", 10)
+		pdf.SetTextColor(113, 113, 122)
+		pdf.SetXY(16, 158)
+		pdf.CellFormat(178, 7, "No recipes available yet", "", 0, "C", false, 0, "")
+	}
+}
+
+func renderRecipePDFPage(pdf *gofpdf.Fpdf, recipe Recipe) error {
 	drawPDFBrand(pdf, 16, 8)
 
 	const contentWidth = 178.0
@@ -106,18 +218,21 @@ func generateRecipePDF(recipe Recipe) ([]byte, error) {
 
 	imageBytes, imageFormat, err := readRecipeImage(recipe.ImageURL)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := writePDFOverview(pdf, recipe, imageBytes, imageFormat, contentWidth); err != nil {
-		return nil, err
+		return err
 	}
 
 	writePDFSection(pdf, "Ingredients", recipe.Ingredients, true)
 	writePDFSection(pdf, "Instructions", recipe.Steps, false)
 	if err := pdf.Error(); err != nil {
-		return nil, fmt.Errorf("render recipe content: %w", err)
+		return fmt.Errorf("render recipe content: %w", err)
 	}
+	return nil
+}
 
+func encodeRecipePDF(pdf *gofpdf.Fpdf) ([]byte, error) {
 	var output bytes.Buffer
 	if err := pdf.Output(&output); err != nil {
 		return nil, fmt.Errorf("encode PDF: %w", err)
@@ -134,9 +249,10 @@ func writePDFOverview(pdf *gofpdf.Fpdf, recipe Recipe, imageBytes []byte, imageF
 	)
 	frameWidth, frameHeight := maxImageWidth, maxImageHeight
 	imageInfo := (*gofpdf.ImageInfoType)(nil)
+	imageName := fmt.Sprintf("recipe-image-%d", pdf.PageNo())
 	if len(imageBytes) > 0 {
 		imageOptions := gofpdf.ImageOptions{ImageType: imageFormat}
-		imageInfo = pdf.RegisterImageOptionsReader("recipe-image", imageOptions, bytes.NewReader(imageBytes))
+		imageInfo = pdf.RegisterImageOptionsReader(imageName, imageOptions, bytes.NewReader(imageBytes))
 		if imageInfo == nil {
 			return fmt.Errorf("register recipe image: %w", pdf.Error())
 		}
@@ -151,7 +267,7 @@ func writePDFOverview(pdf *gofpdf.Fpdf, recipe Recipe, imageBytes []byte, imageF
 	if len(imageBytes) > 0 {
 		imageOptions := gofpdf.ImageOptions{ImageType: imageFormat}
 		_, _, renderWidth, renderHeight := fitPDFImage(imageInfo.Width(), imageInfo.Height(), maxImageWidth, maxImageHeight, imagePadding)
-		pdf.ImageOptions("recipe-image", imageX+imagePadding, imageY+imagePadding, renderWidth, renderHeight, false, imageOptions, 0, "")
+		pdf.ImageOptions(imageName, imageX+imagePadding, imageY+imagePadding, renderWidth, renderHeight, false, imageOptions, 0, "")
 		if err := pdf.Error(); err != nil {
 			return fmt.Errorf("add recipe image: %w", err)
 		}
@@ -284,9 +400,153 @@ func readRecipeImage(imageURL string) ([]byte, string, error) {
 		return nil, "", fmt.Errorf("decode recipe image: %w", err)
 	}
 	switch strings.ToUpper(format) {
-	case "JPEG", "PNG", "GIF":
+	case "JPEG":
+		normalized, err := normalizeJPEGOrientation(imageBytes)
+		if err != nil {
+			return nil, "", fmt.Errorf("normalize recipe image orientation: %w", err)
+		}
+		return normalized, "JPEG", nil
+	case "PNG", "GIF":
 		return imageBytes, strings.ToUpper(format), nil
 	default:
 		return nil, "", fmt.Errorf("unsupported recipe image format %q", format)
 	}
+}
+
+func normalizeJPEGOrientation(data []byte) ([]byte, error) {
+	orientation, err := jpegExifOrientation(data)
+	if err != nil {
+		return nil, err
+	}
+	if orientation == 1 {
+		return data, nil
+	}
+
+	source, err := jpeg.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode JPEG: %w", err)
+	}
+	bounds := source.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	destinationWidth, destinationHeight := width, height
+	if orientation >= 5 {
+		destinationWidth, destinationHeight = height, width
+	}
+	destination := image.NewRGBA(image.Rect(0, 0, destinationWidth, destinationHeight))
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			var destinationX, destinationY int
+			switch orientation {
+			case 2:
+				destinationX, destinationY = width-1-x, y
+			case 3:
+				destinationX, destinationY = width-1-x, height-1-y
+			case 4:
+				destinationX, destinationY = x, height-1-y
+			case 5:
+				destinationX, destinationY = y, x
+			case 6:
+				destinationX, destinationY = height-1-y, x
+			case 7:
+				destinationX, destinationY = height-1-y, width-1-x
+			case 8:
+				destinationX, destinationY = y, width-1-x
+			}
+			destination.Set(destinationX, destinationY, source.At(bounds.Min.X+x, bounds.Min.Y+y))
+		}
+	}
+
+	var normalized bytes.Buffer
+	if err := jpeg.Encode(&normalized, destination, &jpeg.Options{Quality: 95}); err != nil {
+		return nil, fmt.Errorf("encode normalized JPEG: %w", err)
+	}
+	return normalized.Bytes(), nil
+}
+
+func jpegExifOrientation(data []byte) (int, error) {
+	if len(data) < 2 || data[0] != 0xff || data[1] != 0xd8 {
+		return 1, nil
+	}
+
+	for offset := 2; offset+1 < len(data); {
+		if data[offset] != 0xff {
+			offset++
+			continue
+		}
+		for offset < len(data) && data[offset] == 0xff {
+			offset++
+		}
+		if offset >= len(data) {
+			break
+		}
+		marker := data[offset]
+		offset++
+		if marker == 0xda || marker == 0xd9 {
+			break
+		}
+		if marker == 0x01 || marker >= 0xd0 && marker <= 0xd7 {
+			continue
+		}
+		if offset+2 > len(data) {
+			return 1, fmt.Errorf("truncated JPEG segment length")
+		}
+		segmentLength := int(binary.BigEndian.Uint16(data[offset : offset+2]))
+		if segmentLength < 2 || offset+segmentLength > len(data) {
+			return 1, fmt.Errorf("invalid JPEG segment length")
+		}
+		segment := data[offset+2 : offset+segmentLength]
+		if marker == 0xe1 && bytes.HasPrefix(segment, []byte("Exif\x00\x00")) {
+			orientation, err := parseTIFFOrientation(segment[6:])
+			if err != nil {
+				return 1, err
+			}
+			return orientation, nil
+		}
+		offset += segmentLength
+	}
+	return 1, nil
+}
+
+func parseTIFFOrientation(data []byte) (int, error) {
+	if len(data) < 8 {
+		return 1, fmt.Errorf("truncated EXIF TIFF header")
+	}
+	var order binary.ByteOrder
+	switch string(data[:2]) {
+	case "II":
+		order = binary.LittleEndian
+	case "MM":
+		order = binary.BigEndian
+	default:
+		return 1, fmt.Errorf("invalid EXIF byte order")
+	}
+	if order.Uint16(data[2:4]) != 42 {
+		return 1, fmt.Errorf("invalid EXIF TIFF marker")
+	}
+	ifdOffset := uint64(order.Uint32(data[4:8]))
+	if ifdOffset+2 > uint64(len(data)) {
+		return 1, fmt.Errorf("EXIF IFD offset is out of bounds")
+	}
+	entryCount := int(order.Uint16(data[ifdOffset : ifdOffset+2]))
+	entriesOffset := ifdOffset + 2
+	if uint64(entryCount)*12 > uint64(len(data))-entriesOffset {
+		return 1, fmt.Errorf("truncated EXIF IFD entries")
+	}
+	for i := 0; i < entryCount; i++ {
+		entryOffset := entriesOffset + uint64(i*12)
+		entry := data[entryOffset : entryOffset+12]
+		if order.Uint16(entry[:2]) != 0x0112 {
+			continue
+		}
+		if order.Uint16(entry[2:4]) != 3 || order.Uint32(entry[4:8]) < 1 {
+			return 1, fmt.Errorf("invalid EXIF orientation entry")
+		}
+		orientation := int(order.Uint16(entry[8:10]))
+		if orientation < 1 || orientation > 8 {
+			return 1, fmt.Errorf("EXIF orientation %d is out of range", orientation)
+		}
+		return orientation, nil
+	}
+	return 1, nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"math"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func setupRecipePDFTest(t *testing.T, recipe Recipe) http.Handler {
+func setupRecipePDFTest(t *testing.T, recipes ...Recipe) http.Handler {
 	t.Helper()
 
 	previousDB, previousWebRoot := db, webRoot
@@ -40,21 +41,23 @@ func setupRecipePDFTest(t *testing.T, recipe Recipe) http.Handler {
 	)`); err != nil {
 		t.Fatal(err)
 	}
-	_, err = testDB.Exec(
-		"INSERT INTO recipes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		recipe.ID,
-		recipe.Title,
-		recipe.Slug,
-		recipe.Category,
-		recipe.PrepTime,
-		recipe.CookTime,
-		recipe.Servings,
-		recipe.Ingredients,
-		recipe.Steps,
-		recipe.ImageURL,
-	)
-	if err != nil {
-		t.Fatal(err)
+	for _, recipe := range recipes {
+		_, err = testDB.Exec(
+			"INSERT INTO recipes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			recipe.ID,
+			recipe.Title,
+			recipe.Slug,
+			recipe.Category,
+			recipe.PrepTime,
+			recipe.CookTime,
+			recipe.Servings,
+			recipe.Ingredients,
+			recipe.Steps,
+			recipe.ImageURL,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	db = testDB
@@ -70,7 +73,16 @@ func setupRecipePDFTest(t *testing.T, recipe Recipe) http.Handler {
 
 	router := chi.NewRouter()
 	router.Get("/api/recipes/{id}/pdf", downloadRecipePDF)
+	router.Get("/api/cookbook.pdf", downloadCookbookPDF)
 	return router
+}
+
+func sampleRecipeWithTitle(id, title string) Recipe {
+	recipe := samplePDFRecipe()
+	recipe.ID = id
+	recipe.Title = title
+	recipe.Slug = strings.ToLower(strings.ReplaceAll(title, " ", "-"))
+	return recipe
 }
 
 func samplePDFRecipe() Recipe {
@@ -92,6 +104,61 @@ func requestRecipePDF(router http.Handler, id string) *httptest.ResponseRecorder
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	return response
+}
+
+func requestCookbookPDF(router http.Handler) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodGet, "/api/cookbook.pdf", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	return response
+}
+
+func TestDownloadCookbookPDF(t *testing.T) {
+	router := setupRecipePDFTest(
+		t,
+		sampleRecipeWithTitle("recipe-z", "Zucchini Soup"),
+		sampleRecipeWithTitle("recipe-a", "Apple Pie"),
+	)
+	response := requestCookbookPDF(router)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "application/pdf" {
+		t.Fatalf("expected application/pdf, got %q", got)
+	}
+	if got := response.Header().Get("Content-Disposition"); got != `attachment; filename="home-cook-recipe-book.pdf"` {
+		t.Fatalf("unexpected Content-Disposition: %q", got)
+	}
+	if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
+		t.Fatal("response does not contain a PDF")
+	}
+	if pages := bytes.Count(response.Body.Bytes(), []byte("/Type /Page")); pages < 4 {
+		t.Fatalf("expected a cover and two recipe pages, found at least %d pages", pages-1)
+	}
+
+	recipes, err := loadRecipesForCookbook(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recipes) != 2 || recipes[0].Title != "Apple Pie" || recipes[1].Title != "Zucchini Soup" {
+		t.Fatalf("recipes are not sorted alphabetically: %+v", recipes)
+	}
+}
+
+func TestDownloadEmptyCookbookPDF(t *testing.T) {
+	router := setupRecipePDFTest(t)
+	response := requestCookbookPDF(router)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
+		t.Fatal("empty cookbook response does not contain a PDF")
+	}
+	if pages := bytes.Count(response.Body.Bytes(), []byte("/Type /Page")); pages != 2 {
+		t.Fatalf("expected a single cover page, found %d pages", pages-1)
+	}
 }
 
 func TestDownloadRecipePDF(t *testing.T) {
@@ -201,6 +268,55 @@ func TestFitPDFImageKeepsEvenBorderAndAspectRatio(t *testing.T) {
 	if got, want := imageWidth/imageHeight, 1600.0/900.0; math.Abs(got-want) > 0.001 {
 		t.Errorf("image aspect ratio is %.3f, want %.3f", got, want)
 	}
+}
+
+func TestNormalizeJPEGOrientationRotatesImage(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 3, 2))
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 3; x++ {
+			source.Set(x, y, color.RGBA{R: uint8(x * 70), G: uint8(y * 100), A: 255})
+		}
+	}
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, source, &jpeg.Options{Quality: 100}); err != nil {
+		t.Fatal(err)
+	}
+	withOrientation := addJPEGExifOrientation(encoded.Bytes(), 8)
+
+	normalized, err := normalizeJPEGOrientation(withOrientation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := jpeg.DecodeConfig(bytes.NewReader(normalized))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Width != 2 || config.Height != 3 {
+		t.Fatalf("expected rotated JPEG dimensions 2x3, got %dx%d", config.Width, config.Height)
+	}
+	orientation, err := jpegExifOrientation(normalized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if orientation != 1 {
+		t.Fatalf("expected normalized JPEG to have default orientation, got %d", orientation)
+	}
+}
+
+func addJPEGExifOrientation(jpegData []byte, orientation byte) []byte {
+	tiff := []byte{
+		'I', 'I', 42, 0, 8, 0, 0, 0,
+		1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0,
+		orientation, 0, 0, 0,
+		0, 0, 0, 0,
+	}
+	payload := append([]byte("Exif\x00\x00"), tiff...)
+	segmentLength := uint16(len(payload) + 2)
+	segment := []byte{0xff, 0xe1, byte(segmentLength >> 8), byte(segmentLength)}
+	segment = append(segment, payload...)
+	result := append([]byte{}, jpegData[:2]...)
+	result = append(result, segment...)
+	return append(result, jpegData[2:]...)
 }
 
 func TestReadRecipeImageRejectsPathsOutsideUploads(t *testing.T) {
