@@ -130,7 +130,7 @@ function renderRecipes(recipes) {
                     ${recipe.category}
                 </span>
             </div>
-            <h3 class="text-xl font-bold mb-1">${recipe.title}</h3>
+            <h3 class="recipe-card-title text-xl font-bold mb-1">${recipe.title}</h3>
             <div class="text-sm text-zinc-400 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span>⏱ ${recipe.prep_time}</span>
                 <span>🔥 ${recipe.cook_time}</span>
