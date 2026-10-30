@@ -653,19 +653,21 @@ func writePDFIngredientColumnAt(pdf *gofpdf.Fpdf, ingredients []string, x, width
 }
 
 func readRecipeImage(imageURL string) ([]byte, string, error) {
+	var imagePath string
 	if imageURL == "" {
-		return nil, "", nil
-	}
-	uploadPath := strings.TrimPrefix(imageURL, "/www")
-	if !strings.HasPrefix(uploadPath, "/upload/") {
-		return nil, "", fmt.Errorf("unsupported recipe image path")
-	}
+		imagePath = filepath.Join(webRoot, "img", "400x300-tava-no-image.png")
+	} else {
+		uploadPath := strings.TrimPrefix(imageURL, "/www")
+		if !strings.HasPrefix(uploadPath, "/upload/") {
+			return nil, "", fmt.Errorf("unsupported recipe image path")
+		}
 
-	filename := strings.TrimPrefix(uploadPath, "/upload/")
-	if filename == "" || filename == "." || filename == ".." || strings.ContainsAny(filename, `/\`) {
-		return nil, "", fmt.Errorf("invalid recipe image path")
+		filename := strings.TrimPrefix(uploadPath, "/upload/")
+		if filename == "" || filename == "." || filename == ".." || strings.ContainsAny(filename, `/\`) {
+			return nil, "", fmt.Errorf("invalid recipe image path")
+		}
+		imagePath = filepath.Join(webRoot, "upload", filename)
 	}
-	imagePath := filepath.Join(webRoot, "upload", filename)
 	imageBytes, err := os.ReadFile(imagePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("read recipe image: %w", err)

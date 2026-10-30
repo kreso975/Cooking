@@ -1,4 +1,7 @@
-## v0.0.3 - Ongoing
+## v0.0.4 - Ongoing
+- Embedded the default placeholder image in single-recipe and cookbook PDFs when a recipe has no image.
+
+## v0.0.3
 - Added a footer link to export all recipes as one alphabetically ordered cookbook PDF with a cover page.
 - Added a clickable table of contents and recipe bookmarks to cookbook PDFs.
 - Added title, author, subject, keyword, and Creator metadata to recipe and cookbook PDFs; cookbook keywords use distinct, space-delimited recipe categories.

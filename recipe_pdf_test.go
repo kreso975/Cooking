@@ -66,6 +66,16 @@ func setupRecipePDFTest(t *testing.T, recipes ...Recipe) http.Handler {
 	if err := os.MkdirAll(filepath.Join(webRoot, "upload"), 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(webRoot, "img"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	placeholderImage, err := os.ReadFile(filepath.Join("www", "img", "400x300-tava-no-image.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webRoot, "img", "400x300-tava-no-image.png"), placeholderImage, 0644); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		db = previousDB
 		webRoot = previousWebRoot
@@ -138,6 +148,9 @@ func TestDownloadCookbookPDF(t *testing.T) {
 	if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
 		t.Fatal("response does not contain a PDF")
 	}
+	if images := bytes.Count(response.Body.Bytes(), []byte("/Subtype /Image")); images != 2 {
+		t.Fatalf("expected the placeholder image on both recipe pages, found %d images", images)
+	}
 	assertPDFMetadata(t, response.Body.Bytes(), "Home Cook Recipe Book", "Home Cook", "Recipe", "Dessert Main Course")
 	if pages := bytes.Count(response.Body.Bytes(), []byte("/Type /Page")); pages < 5 {
 		t.Fatalf("expected a cover, contents page, and two recipe pages, found at least %d pages", pages-1)
@@ -191,6 +204,9 @@ func TestDownloadRecipePDF(t *testing.T) {
 	}
 	if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
 		t.Fatal("response does not contain a PDF")
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("/Subtype /Image")) {
+		t.Fatal("generated PDF does not contain the placeholder image")
 	}
 	assertPDFMetadata(t, response.Body.Bytes(), "Čokoladni kolač", "Home Cook", "Recipe", "Dessert")
 	if !bytes.HasSuffix(bytes.TrimSpace(response.Body.Bytes()), []byte("%%EOF")) {
@@ -320,6 +336,7 @@ func TestDownloadRecipePDFUnknownRecipe(t *testing.T) {
 }
 
 func TestGenerateRecipePDFCreatesMultiplePages(t *testing.T) {
+	setupRecipePDFTest(t)
 	recipe := samplePDFRecipe()
 	recipe.Steps = strings.Repeat("Stir the mixture until it is smooth and evenly combined.\n", 120)
 
@@ -357,6 +374,7 @@ func columnLengths(columns [][]string) []int {
 }
 
 func TestGenerateRecipePDFContinuesLongIngredientColumnsOnNewPages(t *testing.T) {
+	setupRecipePDFTest(t)
 	recipe := samplePDFRecipe()
 	recipe.Ingredients = strings.TrimSuffix(strings.Repeat("Ingredient\n", 40), "\n")
 
