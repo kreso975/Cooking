@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -133,6 +134,7 @@ func loadRecipesForCookbook(ctx context.Context) ([]Recipe, error) {
 
 func generateRecipePDF(recipe Recipe) ([]byte, error) {
 	pdf := newRecipePDF()
+	setRecipePDFMetadata(pdf, recipe.Title, recipeKeyword(recipe.Category))
 	pdf.AddPage()
 	if err := renderRecipePDFPage(pdf, recipe); err != nil {
 		return nil, err
@@ -142,15 +144,138 @@ func generateRecipePDF(recipe Recipe) ([]byte, error) {
 
 func generateCookbookPDF(recipes []Recipe) ([]byte, error) {
 	pdf := newRecipePDF()
+	setRecipePDFMetadata(pdf, "Home Cook Recipe Book", cookbookCategoryKeywords(recipes))
 	pdf.AddPage()
 	writePDFCover(pdf, len(recipes))
-	for _, recipe := range recipes {
+	contents := writeCookbookContents(pdf, recipes)
+	for i, recipe := range recipes {
 		pdf.AddPage()
+		pdf.SetLink(contents[i].linkID, 24, pdf.PageNo())
+		pdf.Bookmark(recipe.Title, 0, 24)
+		contents[i].recipePage = pdf.PageNo()
 		if err := renderRecipePDFPage(pdf, recipe); err != nil {
 			return nil, fmt.Errorf("render recipe %q: %w", recipe.ID, err)
 		}
 	}
+	writeCookbookContentsPageNumbers(pdf, contents)
 	return encodeRecipePDF(pdf)
+}
+
+func cookbookCategoryKeywords(recipes []Recipe) string {
+	categories := make(map[string]string, len(recipes))
+	for _, recipe := range recipes {
+		category := recipeKeyword(recipe.Category)
+		key := strings.ToLower(category)
+		if key != "" {
+			if _, exists := categories[key]; exists {
+				continue
+			}
+			categories[key] = category
+		}
+	}
+
+	keys := make([]string, 0, len(categories))
+	for key := range categories {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	distinctCategories := make([]string, 0, len(keys))
+	for _, key := range keys {
+		distinctCategories = append(distinctCategories, categories[key])
+	}
+	return strings.Join(distinctCategories, " ")
+}
+
+func recipeKeyword(category string) string {
+	return strings.TrimSpace(strings.ReplaceAll(category, `"`, ""))
+}
+
+func setRecipePDFMetadata(pdf *gofpdf.Fpdf, title, keywords string) {
+	pdf.SetTitle(title, true)
+	pdf.SetAuthor("Home Cook", true)
+	pdf.SetSubject("Recipe", true)
+	pdf.SetKeywords(strings.Trim(strings.TrimSpace(keywords), `"`), true)
+}
+
+type cookbookContentsEntry struct {
+	contentsPage int
+	rowY         float64
+	rowHeight    float64
+	recipePage   int
+	linkID       int
+}
+
+func writeCookbookContents(pdf *gofpdf.Fpdf, recipes []Recipe) []cookbookContentsEntry {
+	if len(recipes) == 0 {
+		return nil
+	}
+
+	const (
+		leftMargin = 16.0
+		titleWidth = 160.0
+		startY     = 47.0
+		bottomY    = 278.0
+		lineHeight = 5.0
+	)
+
+	entries := make([]cookbookContentsEntry, 0, len(recipes))
+	startContentsPage := func() {
+		pdf.AddPage()
+		drawPDFBrand(pdf, leftMargin, 8)
+		pdf.SetFont("GoSans", "B", 20)
+		pdf.SetTextColor(39, 39, 42)
+		pdf.SetXY(leftMargin, 29)
+		pdf.CellFormat(178, 9, "Contents", "", 0, "L", false, 0, "")
+		pdf.SetDrawColor(228, 228, 231)
+		pdf.SetLineWidth(0.3)
+		pdf.Line(leftMargin, 42, 194, 42)
+		pdf.SetY(startY)
+	}
+
+	startContentsPage()
+	for _, recipe := range recipes {
+		pdf.SetFont("GoSans", "", 10)
+		lines := pdf.SplitText(recipe.Title, titleWidth)
+		rowHeight := math.Max(8, float64(len(lines))*lineHeight+2)
+		if pdf.GetY()+rowHeight > bottomY {
+			startContentsPage()
+		}
+
+		rowY := pdf.GetY()
+		pdf.SetTextColor(63, 63, 70)
+		pdf.SetXY(leftMargin, rowY)
+		pdf.MultiCell(titleWidth, lineHeight, recipe.Title, "", "L", false)
+		entries = append(entries, cookbookContentsEntry{
+			contentsPage: pdf.PageNo(),
+			rowY:         rowY,
+			rowHeight:    rowHeight,
+			linkID:       pdf.AddLink(),
+		})
+		pdf.SetY(rowY + rowHeight)
+	}
+	return entries
+}
+
+func writeCookbookContentsPageNumbers(pdf *gofpdf.Fpdf, entries []cookbookContentsEntry) {
+	if len(entries) == 0 {
+		return
+	}
+
+	const (
+		pageNumberX     = 180.0
+		pageNumberWidth = 14.0
+	)
+	lastPage := pdf.PageNo()
+	for _, entry := range entries {
+		pdf.SetPage(entry.contentsPage)
+		pdf.Link(16, entry.rowY, 178, entry.rowHeight, entry.linkID)
+		pdf.SetFont("GoSans", "B", 10)
+		pdf.SetTextColor(234, 88, 12)
+		pdf.SetXY(pageNumberX, entry.rowY+(entry.rowHeight-6)/2)
+		pdf.CellFormat(pageNumberWidth, 6, fmt.Sprint(entry.recipePage), "", 0, "R", false, 0, "")
+	}
+	pdf.SetPage(lastPage)
 }
 
 func newRecipePDF() *gofpdf.Fpdf {

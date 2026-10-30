@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -114,10 +115,14 @@ func requestCookbookPDF(router http.Handler) *httptest.ResponseRecorder {
 }
 
 func TestDownloadCookbookPDF(t *testing.T) {
+	dessert := sampleRecipeWithTitle("recipe-z", "Zucchini Soup")
+	dessert.Category = `"Dessert"`
+	mainCourse := sampleRecipeWithTitle("recipe-a", "Apple Pie")
+	mainCourse.Category = `"Main Course"`
 	router := setupRecipePDFTest(
 		t,
-		sampleRecipeWithTitle("recipe-z", "Zucchini Soup"),
-		sampleRecipeWithTitle("recipe-a", "Apple Pie"),
+		dessert,
+		mainCourse,
 	)
 	response := requestCookbookPDF(router)
 
@@ -133,8 +138,16 @@ func TestDownloadCookbookPDF(t *testing.T) {
 	if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
 		t.Fatal("response does not contain a PDF")
 	}
-	if pages := bytes.Count(response.Body.Bytes(), []byte("/Type /Page")); pages < 4 {
-		t.Fatalf("expected a cover and two recipe pages, found at least %d pages", pages-1)
+	assertPDFMetadata(t, response.Body.Bytes(), "Home Cook Recipe Book", "Home Cook", "Recipe", "Dessert Main Course")
+	if pages := bytes.Count(response.Body.Bytes(), []byte("/Type /Page")); pages < 5 {
+		t.Fatalf("expected a cover, contents page, and two recipe pages, found at least %d pages", pages-1)
+	}
+	if links := bytes.Count(response.Body.Bytes(), []byte("/Subtype /Link")); links != 2 {
+		t.Fatalf("expected two clickable contents entries, found %d", links)
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("/Outlines ")) ||
+		!bytes.Contains(response.Body.Bytes(), []byte("/PageMode /UseOutlines")) {
+		t.Fatal("PDF does not expose recipe bookmarks in the document outline")
 	}
 
 	recipes, err := loadRecipesForCookbook(t.Context())
@@ -162,7 +175,9 @@ func TestDownloadEmptyCookbookPDF(t *testing.T) {
 }
 
 func TestDownloadRecipePDF(t *testing.T) {
-	router := setupRecipePDFTest(t, samplePDFRecipe())
+	recipe := samplePDFRecipe()
+	recipe.Category = `"Dessert"`
+	router := setupRecipePDFTest(t, recipe)
 	response := requestRecipePDF(router, "recipe-1")
 
 	if response.Code != http.StatusOK {
@@ -177,12 +192,75 @@ func TestDownloadRecipePDF(t *testing.T) {
 	if !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
 		t.Fatal("response does not contain a PDF")
 	}
+	assertPDFMetadata(t, response.Body.Bytes(), "Čokoladni kolač", "Home Cook", "Recipe", "Dessert")
 	if !bytes.HasSuffix(bytes.TrimSpace(response.Body.Bytes()), []byte("%%EOF")) {
 		t.Fatal("PDF does not have an EOF marker")
 	}
 	if !bytes.Contains(response.Body.Bytes(), []byte("/XYZ null null 1")) {
 		t.Fatal("PDF does not request actual-size initial zoom")
 	}
+}
+
+func TestCookbookCategoryKeywordsAreDistinctAndSorted(t *testing.T) {
+	keywords := cookbookCategoryKeywords([]Recipe{
+		{Category: `"Dessert"`},
+		{Category: `"Main Course"`},
+		{Category: " dessert "},
+		{Category: ""},
+	})
+	if keywords != "Dessert Main Course" {
+		t.Fatalf("unexpected cookbook category keywords %q", keywords)
+	}
+}
+
+func TestRecipePDFMetadataDoesNotQuoteKeywordValue(t *testing.T) {
+	pdf := newRecipePDF()
+	setRecipePDFMetadata(pdf, "Recipe Book", "Blitva Hrenovka Piletina Poriluk Riba")
+	pdf.AddPage()
+
+	pdfBytes, err := encodeRecipePDF(pdf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPDFMetadata(t, pdfBytes, "Recipe Book", "Home Cook", "Recipe", "Blitva Hrenovka Piletina Poriluk Riba")
+	if bytes.Contains(pdfBytes, []byte(`"Blitva Hrenovka Piletina Poriluk Riba"`)) {
+		t.Fatal("PDF metadata wraps keywords in quotes")
+	}
+}
+
+func assertPDFMetadata(t *testing.T, pdfBytes []byte, title, author, subject, keywords string) {
+	t.Helper()
+
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{name: "Title", value: title},
+		{name: "Author", value: author},
+		{name: "Subject", value: subject},
+		{name: "Keywords", value: keywords},
+	} {
+		encodedValue := utf16PDFString(field.value)
+		encodedValue = bytes.ReplaceAll(encodedValue, []byte(`\`), []byte(`\\`))
+		encodedValue = bytes.ReplaceAll(encodedValue, []byte("("), []byte(`\(`))
+		encodedValue = bytes.ReplaceAll(encodedValue, []byte(")"), []byte(`\)`))
+		encodedValue = bytes.ReplaceAll(encodedValue, []byte("\r"), []byte(`\r`))
+		expected := append([]byte("/"+field.name+" ("), encodedValue...)
+		expected = append(expected, ')')
+		if !bytes.Contains(pdfBytes, expected) {
+			start := bytes.Index(pdfBytes, []byte("/"+field.name+" "))
+			end := min(len(pdfBytes), start+160)
+			t.Errorf("PDF metadata %s does not contain %q: % x", field.name, field.value, pdfBytes[start:end])
+		}
+	}
+}
+
+func utf16PDFString(value string) []byte {
+	encoded := []byte{0xfe, 0xff}
+	for _, character := range utf16.Encode([]rune(value)) {
+		encoded = append(encoded, byte(character>>8), byte(character))
+	}
+	return encoded
 }
 
 func TestDownloadRecipePDFIncludesImage(t *testing.T) {

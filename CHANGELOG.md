@@ -1,5 +1,7 @@
 ## v0.0.3 - Ongoing
 - Added a footer link to export all recipes as one alphabetically ordered cookbook PDF with a cover page.
+- Added a clickable table of contents and recipe bookmarks to cookbook PDFs.
+- Added title, author, subject, and keyword metadata to recipe and cookbook PDFs; cookbook keywords use distinct, space-delimited recipe categories.
 - Corrected EXIF orientation for JPEG images when embedding them in PDFs.
 
 ## v0.0.2

@@ -24,10 +24,16 @@ This is almost an entirely vibe-coded project (I still had to do some testing, o
 Download an individual recipe as a PDF using the PDF icon on a recipe card or
 next to the title in the recipe detail view. PDFs include the recipe image,
 preparation and cooking times, servings, ingredients, and instructions.
+PDF metadata includes the recipe title, Home Cook as author, Recipe as subject,
+and the recipe category as a keyword. Cookbook category keywords are
+space-delimited to keep the value unquoted in PDF properties.
 
 Use **Export cookbook PDF** in the page footer to download all recipes together
-as one cookbook. The cookbook has a cover page and lists recipes alphabetically
-by title. Recipe images are oriented using their EXIF metadata when needed.
+as one cookbook. The cookbook has a cover page, a table of contents with page
+numbers, and lists recipes alphabetically by title. Recipe images are oriented
+using their EXIF metadata when needed. Its metadata uses Home Cook Recipe Book
+as the title and includes each distinct recipe category as a space-delimited
+keyword.
 
 ## Configuration
 
