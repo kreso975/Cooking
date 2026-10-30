@@ -196,6 +196,7 @@ func setRecipePDFMetadata(pdf *gofpdf.Fpdf, title, keywords string) {
 	pdf.SetAuthor("Home Cook", true)
 	pdf.SetSubject("Recipe", true)
 	pdf.SetKeywords(strings.Trim(strings.TrimSpace(keywords), `"`), true)
+	pdf.SetCreator("homeCookingServer", true)
 }
 
 type cookbookContentsEntry struct {
@@ -472,15 +473,12 @@ func writePDFMetadata(pdf *gofpdf.Fpdf, x, y, width, height float64, recipe Reci
 }
 
 func writePDFSection(pdf *gofpdf.Fpdf, heading, content string, useBullets bool) {
-	pdf.SetFont("GoSans", "B", 15)
-	pdf.SetTextColor(234, 88, 12)
-	pdf.Ln(2)
-	pdf.MultiCell(0, 8, heading, "", "L", false)
-	pdf.SetDrawColor(228, 228, 231)
-	pdf.SetLineWidth(0.3)
-	pdf.Line(16, pdf.GetY(), 194, pdf.GetY())
-	pdf.Ln(3)
+	if useBullets {
+		writePDFIngredients(pdf, heading, content)
+		return
+	}
 
+	writePDFSectionHeading(pdf, heading)
 	pdf.SetFont("GoSans", "", 11)
 	pdf.SetTextColor(63, 63, 70)
 	lineNumber := 0
@@ -489,16 +487,169 @@ func writePDFSection(pdf *gofpdf.Fpdf, heading, content string, useBullets bool)
 		if line == "" {
 			continue
 		}
-		prefix := ""
-		if useBullets {
-			prefix = "- "
-		} else {
-			lineNumber++
-			prefix = fmt.Sprintf("%d. ", lineNumber)
-		}
-		pdf.MultiCell(0, 6, prefix+line, "", "L", false)
+		lineNumber++
+		pdf.MultiCell(0, 6, fmt.Sprintf("%d. %s", lineNumber, line), "", "L", false)
 		pdf.Ln(1)
 	}
+}
+
+func writePDFSectionHeading(pdf *gofpdf.Fpdf, heading string) {
+	pdf.SetFont("GoSans", "B", 15)
+	pdf.SetTextColor(234, 88, 12)
+	pdf.Ln(2)
+	pdf.MultiCell(0, 8, heading, "", "L", false)
+	pdf.SetDrawColor(228, 228, 231)
+	pdf.SetLineWidth(0.3)
+	pdf.Line(16, pdf.GetY(), 194, pdf.GetY())
+	pdf.Ln(3)
+}
+
+func writePDFIngredients(pdf *gofpdf.Fpdf, heading, content string) {
+	ingredients := splitPDFIngredients(content)
+	columns := splitPDFIngredientColumns(ingredients)
+	if len(columns) == 1 {
+		writePDFSectionHeading(pdf, heading)
+		writePDFIngredientColumn(pdf, columns[0], 16, 178)
+		return
+	}
+
+	pdf.SetFont("GoSans", "", 11)
+	pdf.SetTextColor(63, 63, 70)
+	const (
+		leftMargin   = 16.0
+		contentWidth = 178.0
+		columnGap    = 6.0
+		pageBottom   = 278.0
+		nextPageY    = 47.0
+		lineHeight   = 6.0
+		itemGap      = 1.0
+		maxColumns   = 3
+	)
+	writePDFSectionHeading(pdf, heading)
+	startY := pdf.GetY()
+	lastY := startY
+
+	for groupStart := 0; groupStart < len(columns); groupStart += maxColumns {
+		if groupStart > 0 {
+			pdf.AddPage()
+			drawPDFBrand(pdf, 16, 8)
+			writePDFContinuedSectionHeading(pdf, heading)
+			startY = pdf.GetY()
+		}
+
+		groupEnd := min(groupStart+maxColumns, len(columns))
+		group := columns[groupStart:groupEnd]
+		columnWidth := (contentWidth - float64(len(group)-1)*columnGap) / float64(len(group))
+		minimumHeight := math.Inf(1)
+		for _, column := range group {
+			if len(column) > 0 {
+				itemHeight := float64(len(pdf.SplitText("- "+column[0], columnWidth)))*lineHeight + itemGap
+				minimumHeight = math.Min(minimumHeight, itemHeight)
+			}
+		}
+		if pageBottom-startY < minimumHeight {
+			pdf.AddPage()
+			drawPDFBrand(pdf, 16, 8)
+			writePDFContinuedSectionHeading(pdf, heading)
+			startY = pdf.GetY()
+		}
+
+		columnPages := make([][][]string, len(group))
+		pageCount := 0
+		for i, column := range group {
+			columnPages[i] = paginatePDFIngredientColumn(pdf, column, columnWidth, pageBottom-startY, pageBottom-nextPageY)
+			pageCount = max(pageCount, len(columnPages[i]))
+		}
+		for page := 0; page < pageCount; page++ {
+			if page > 0 {
+				pdf.AddPage()
+				drawPDFBrand(pdf, 16, 8)
+				writePDFContinuedSectionHeading(pdf, heading)
+				startY = pdf.GetY()
+			}
+
+			for i, pages := range columnPages {
+				var items []string
+				if page < len(pages) {
+					items = pages[page]
+				}
+				x := leftMargin + float64(i)*(columnWidth+columnGap)
+				columnY := writePDFIngredientColumnAt(pdf, items, x, columnWidth, startY)
+				lastY = math.Max(lastY, columnY)
+			}
+		}
+	}
+	pdf.SetY(lastY + itemGap)
+}
+
+func writePDFContinuedSectionHeading(pdf *gofpdf.Fpdf, heading string) {
+	pdf.SetY(29)
+	writePDFSectionHeading(pdf, heading+" (continued)")
+}
+
+func splitPDFIngredients(content string) []string {
+	ingredients := make([]string, 0)
+	for _, ingredient := range strings.Split(content, "\n") {
+		if ingredient = strings.TrimSpace(ingredient); ingredient != "" {
+			ingredients = append(ingredients, ingredient)
+		}
+	}
+	return ingredients
+}
+
+func splitPDFIngredientColumns(ingredients []string) [][]string {
+	if len(ingredients) == 0 {
+		return [][]string{nil}
+	}
+
+	columns := make([][]string, 0, (len(ingredients)+5)/6)
+	for len(ingredients) > 0 {
+		columnSize := min(6, len(ingredients))
+		columns = append(columns, ingredients[:columnSize])
+		ingredients = ingredients[columnSize:]
+	}
+	return columns
+}
+
+func paginatePDFIngredientColumn(pdf *gofpdf.Fpdf, ingredients []string, width, firstPageCapacity, nextPageCapacity float64) [][]string {
+	if len(ingredients) == 0 {
+		return nil
+	}
+
+	const (
+		lineHeight = 6.0
+		itemGap    = 1.0
+	)
+	pages := make([][]string, 1)
+	pageCapacity := firstPageCapacity
+	usedHeight := 0.0
+	for _, ingredient := range ingredients {
+		itemHeight := float64(len(pdf.SplitText("- "+ingredient, width)))*lineHeight + itemGap
+		if usedHeight > 0 && usedHeight+itemHeight > pageCapacity {
+			pages = append(pages, nil)
+			pageCapacity = nextPageCapacity
+			usedHeight = 0
+		}
+		pages[len(pages)-1] = append(pages[len(pages)-1], ingredient)
+		usedHeight += itemHeight
+	}
+	return pages
+}
+
+func writePDFIngredientColumn(pdf *gofpdf.Fpdf, ingredients []string, x, width float64) {
+	writePDFIngredientColumnAt(pdf, ingredients, x, width, pdf.GetY())
+}
+
+func writePDFIngredientColumnAt(pdf *gofpdf.Fpdf, ingredients []string, x, width, y float64) float64 {
+	pdf.SetFont("GoSans", "", 11)
+	pdf.SetTextColor(63, 63, 70)
+	for _, ingredient := range ingredients {
+		pdf.SetXY(x, y)
+		lines := pdf.SplitText("- "+ingredient, width)
+		pdf.MultiCell(width, 6, "- "+ingredient, "", "L", false)
+		y += float64(len(lines))*6 + 1
+	}
+	return y
 }
 
 func readRecipeImage(imageURL string) ([]byte, string, error) {

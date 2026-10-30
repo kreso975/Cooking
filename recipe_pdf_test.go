@@ -239,6 +239,7 @@ func assertPDFMetadata(t *testing.T, pdfBytes []byte, title, author, subject, ke
 		{name: "Author", value: author},
 		{name: "Subject", value: subject},
 		{name: "Keywords", value: keywords},
+		{name: "Creator", value: "homeCookingServer"},
 	} {
 		encodedValue := utf16PDFString(field.value)
 		encodedValue = bytes.ReplaceAll(encodedValue, []byte(`\`), []byte(`\\`))
@@ -328,6 +329,43 @@ func TestGenerateRecipePDFCreatesMultiplePages(t *testing.T) {
 	}
 	if pages := bytes.Count(pdfBytes, []byte("/Type /Page")); pages < 3 {
 		t.Fatalf("expected multiple pages for long instructions, found %d page objects", pages)
+	}
+}
+
+func TestPDFIngredientsUseSecondColumnAfterSixthItem(t *testing.T) {
+	ingredients := []string{
+		"Ingredient 1", "Ingredient 2", "Ingredient 3", "Ingredient 4",
+		"Ingredient 5", "Ingredient 6", "Ingredient 7", "Ingredient 8",
+		"Ingredient 9", "Ingredient 10", "Ingredient 11", "Ingredient 12",
+		"Ingredient 13",
+	}
+	columns := splitPDFIngredientColumns(ingredients)
+	if len(columns) != 3 || len(columns[0]) != 6 || len(columns[1]) != 6 || len(columns[2]) != 1 {
+		t.Fatalf("expected ingredient columns of 6, 6, and 1 items, got %v", columnLengths(columns))
+	}
+	if columns[0][5] != "Ingredient 6" || columns[1][0] != "Ingredient 7" || columns[2][0] != "Ingredient 13" {
+		t.Fatalf("unexpected ingredient column boundaries: %v", columns)
+	}
+}
+
+func columnLengths(columns [][]string) []int {
+	lengths := make([]int, len(columns))
+	for i, column := range columns {
+		lengths[i] = len(column)
+	}
+	return lengths
+}
+
+func TestGenerateRecipePDFContinuesLongIngredientColumnsOnNewPages(t *testing.T) {
+	recipe := samplePDFRecipe()
+	recipe.Ingredients = strings.TrimSuffix(strings.Repeat("Ingredient\n", 40), "\n")
+
+	pdfBytes, err := generateRecipePDF(recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pages := bytes.Count(pdfBytes, []byte("/Type /Page")); pages < 3 {
+		t.Fatalf("expected long ingredient columns to continue on additional pages, found %d pages", pages-1)
 	}
 }
 
