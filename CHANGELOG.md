@@ -1,4 +1,5 @@
 ## v0.0.4 - Ongoing
+- Randomized recipe order on the home page browse list while keeping search results in that order.
 - Cropped uploaded recipe images to 4:3, optimized them as JPEGs, and assigned unique timestamp-based filenames.
 - Embedded the default placeholder image in single-recipe and cookbook PDFs when a recipe has no image.
 

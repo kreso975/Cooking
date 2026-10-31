@@ -6,6 +6,7 @@ document.getElementById('current-year').textContent = new Date().getFullYear();
 let currentRecipeData = null;
 let currentImageUrl = '';
 let slugManuallyEdited = false;
+let allRecipes = [];
 
 document.addEventListener('click', (event) => {
     if (event.target.closest('[onclick], a[href], button[type="submit"]')) {
@@ -100,10 +101,20 @@ function closeForm() {
 async function fetchRecipes() {
     try {
         const res = await axios.get(`${BASE_URL}/api/recipes`);
-        renderRecipes(res.data);
+        allRecipes = shuffleRecipes(res.data);
+        renderRecipes(allRecipes);
     } catch (err) {
         console.error("Failed to fetch recipes:", err);
     }
+}
+
+function shuffleRecipes(recipes) {
+    const shuffled = [...recipes];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
 }
 
 /**
@@ -442,14 +453,12 @@ function normalizeSearchText(value) {
 
 document.getElementById('search-input').oninput = (e) => {
     const query = normalizeSearchText(e.target.value);
-    axios.get(`${BASE_URL}/api/recipes`).then(res => {
-        const filtered = res.data.filter(rcp =>
-            normalizeSearchText(rcp.title).includes(query) ||
-            normalizeSearchText(rcp.category).includes(query) ||
-            normalizeSearchText(rcp.ingredients).includes(query)
-        );
-        renderRecipes(filtered);
-    });
+    const filtered = allRecipes.filter(rcp =>
+        normalizeSearchText(rcp.title).includes(query) ||
+        normalizeSearchText(rcp.category).includes(query) ||
+        normalizeSearchText(rcp.ingredients).includes(query)
+    );
+    renderRecipes(filtered);
 };
 
 // Open a directly linked recipe or load the browse view.
