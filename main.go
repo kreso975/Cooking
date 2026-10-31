@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -330,41 +332,59 @@ func deleteRecipe(w http.ResponseWriter, r *http.Request) {
 }
 
 func uploadImage(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRecipeImageUploadBytes)
+	if err := r.ParseMultipartForm(maxRecipeImageUploadBytes); err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			http.Error(w, "Image exceeds the maximum upload size", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "Invalid image upload", http.StatusBadRequest)
+		return
+	}
+	if r.MultipartForm != nil {
+		defer func() {
+			_ = r.MultipartForm.RemoveAll()
+		}()
+	}
+
 	file, handler, err := r.FormFile("image")
 	if err != nil {
 		http.Error(w, "Error retrieving the file", http.StatusBadRequest)
 		return
 	}
-	defer func() {
-		_ = file.Close()
-	}()
+	defer file.Close()
+	if handler.Size > maxRecipeImageUploadBytes {
+		http.Error(w, "Image exceeds the maximum upload size", http.StatusRequestEntityTooLarge)
+		return
+	}
 
-	filename := handler.Filename
-	filename = filepath.Base(filename)
-	if filename == "." || filename == string(filepath.Separator) {
-		http.Error(w, "Invalid file name", http.StatusBadRequest)
+	original, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "Error reading uploaded image", http.StatusBadRequest)
+		return
+	}
+	optimized, err := optimizeRecipeImage(original)
+	if err != nil {
+		http.Error(w, "Invalid or unsupported image", http.StatusBadRequest)
 		return
 	}
 
 	uploadDir := filepath.Join(webRoot, "upload")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Printf("Error creating image upload directory: %v", err)
 		http.Error(w, "Error creating upload directory", http.StatusInternalServerError)
 		return
 	}
-	dstPath := filepath.Join(uploadDir, filename)
-
-	dst, err := os.Create(dstPath)
+	filename, err := saveRecipeImage(uploadDir, optimized, time.Now())
 	if err != nil {
+		log.Printf("Error saving optimized recipe image: %v", err)
 		http.Error(w, "Error saving the file", http.StatusInternalServerError)
-		return
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, file); err != nil {
-		http.Error(w, "Error copying the file", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"url": "/upload/" + filename})
+	if err := json.NewEncoder(w).Encode(map[string]string{"url": "/upload/" + filename}); err != nil {
+		log.Printf("Error writing image upload response: %v", err)
+	}
 }
