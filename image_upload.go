@@ -15,7 +15,10 @@ import (
 	"path/filepath"
 	"time"
 
+	_ "golang.org/x/image/bmp"
 	xdraw "golang.org/x/image/draw"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -30,7 +33,8 @@ func optimizeRecipeImage(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode image configuration: %w", err)
 	}
-	if format != "jpeg" && format != "png" && format != "gif" {
+	if format != "jpeg" && format != "png" && format != "gif" &&
+		format != "bmp" && format != "tiff" && format != "webp" {
 		return nil, fmt.Errorf("unsupported image format %q", format)
 	}
 	if config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > maxRecipeImagePixels {

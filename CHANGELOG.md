@@ -1,4 +1,7 @@
 ## v0.0.4 - Ongoing
+- Added upload support for WebP, BMP, and TIFF images; uploads are optimized as JPEGs.
+- Trimmed leading and trailing spaces from recipe search queries.
+- Included recipe instructions in search matches.
 - Added a confirmation prompt before leaving Add or Edit mode via Browse or Add Recipe, warning that unsaved changes will be lost.
 - Randomized recipe order on the home page browse list while keeping search results in that order.
 - Cropped uploaded recipe images to 4:3, optimized them as JPEGs, and assigned unique timestamp-based filenames.

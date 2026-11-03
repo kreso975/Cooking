@@ -480,11 +480,12 @@ function normalizeSearchText(value) {
 }
 
 document.getElementById('search-input').oninput = (e) => {
-    const query = normalizeSearchText(e.target.value);
+    const query = normalizeSearchText(e.target.value.trim());
     const filtered = allRecipes.filter(rcp =>
         normalizeSearchText(rcp.title).includes(query) ||
         normalizeSearchText(rcp.category).includes(query) ||
-        normalizeSearchText(rcp.ingredients).includes(query)
+        normalizeSearchText(rcp.ingredients).includes(query) ||
+        normalizeSearchText(rcp.steps).includes(query)
     );
     renderRecipes(filtered);
 };

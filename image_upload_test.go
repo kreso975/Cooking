@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -91,6 +92,45 @@ func TestUploadImageRejectsInvalidImage(t *testing.T) {
 	response := requestImageUpload(t, "not-an-image.txt", []byte("not an image"))
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+}
+
+func TestUploadImageAcceptsWebP(t *testing.T) {
+	previousWebRoot := webRoot
+	webRoot = t.TempDir()
+	t.Cleanup(func() {
+		webRoot = previousWebRoot
+	})
+
+	webp, err := base64.StdEncoding.DecodeString("UklGRjoAAABXRUJQVlA4IC4AAADQAQCdASoIAAYAAUAmJaACdLoB+AADsAD+5fo/+bAgZofTB/7Kx9Kx9Kx+5QAA")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := requestImageUpload(t, "recipe.webp", webp)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var result struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	optimized, err := os.ReadFile(filepath.Join(webRoot, "upload", filepath.Base(result.URL)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, format, err := image.DecodeConfig(bytes.NewReader(optimized))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if format != "jpeg" {
+		t.Fatalf("expected optimized JPEG output, got %q", format)
+	}
+	if config.Width != 8 || config.Height != 6 {
+		t.Fatalf("expected an 8x6 optimized image, got %dx%d", config.Width, config.Height)
 	}
 }
 
