@@ -28,6 +28,17 @@
             </div>
         </div>
     </dialog>
+    <dialog id="leave-editing-confirmation" class="confirmation-dialog" aria-labelledby="leave-editing-dialog-title" aria-describedby="leave-editing-dialog-message">
+        <div class="confirmation-dialog-content">
+            <div class="confirmation-dialog-icon" aria-hidden="true">!</div>
+            <h2 id="leave-editing-dialog-title" class="text-xl font-bold text-white">Leave editing mode?</h2>
+            <p id="leave-editing-dialog-message" class="mt-2 text-sm text-zinc-400">Are you sure you want to leave editing mode? Your unsaved changes will be lost.</p>
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="cancelLeaveEditingMode()" class="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-200 hover:bg-zinc-700 transition">Stay</button>
+                <button id="confirm-leave-editing-button" type="button" onclick="confirmLeaveEditingMode()" class="px-4 py-2 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-500 transition">Leave</button>
+            </div>
+        </div>
+    </dialog>
     <!-- Navigation -->
     <nav class="border-b border-zinc-800 p-4 flex justify-between items-center bg-black/40 backdrop-blur-md sticky top-0 z-50">
         <a href="/" class="flex items-center gap-2 cursor-pointer">
@@ -35,8 +46,8 @@
             <h1 class="text-xl font-bold bg-gradient-to-r from-orange-500 to-orange-300 bg-clip-text text-transparent">Home Cook</h1>
         </a>
         <div class="flex gap-2">
-            <button onclick="switchMode('browse')" id="btn-browse" class="px-4 py-2 rounded-lg transition-all duration-200 bg-orange-600 hover:bg-orange-700">Browse</button>
-            <button onclick="switchMode('form')" id="btn-add" class="px-4 py-2 rounded-lg transition-all duration-200 bg-zinc-800 hover:bg-zinc-700">Add Recipe</button>
+            <button onclick="requestModeChange('browse')" id="btn-browse" class="px-4 py-2 rounded-lg transition-all duration-200 bg-orange-600 hover:bg-orange-700">Browse</button>
+            <button onclick="requestModeChange('form')" id="btn-add" class="px-4 py-2 rounded-lg transition-all duration-200 bg-zinc-800 hover:bg-zinc-700">Add Recipe</button>
         </div>
     </nav>
 

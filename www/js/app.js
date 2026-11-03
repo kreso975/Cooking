@@ -7,6 +7,11 @@ let currentRecipeData = null;
 let currentImageUrl = '';
 let slugManuallyEdited = false;
 let allRecipes = [];
+let pendingModeChange = null;
+
+document.getElementById('leave-editing-confirmation').addEventListener('close', () => {
+    pendingModeChange = null;
+});
 
 document.addEventListener('click', (event) => {
     if (event.target.closest('[onclick], a[href], button[type="submit"]')) {
@@ -76,6 +81,29 @@ function switchMode(mode) {
         btnBrowse.classList.replace('bg-orange-600', 'bg-zinc-800');
         btnAdd.classList.replace('bg-zinc-800', 'bg-orange-600');
         resetForm();
+    }
+}
+
+function requestModeChange(mode) {
+    const viewForm = document.getElementById('view-form');
+    if (viewForm.classList.contains('hidden')) {
+        switchMode(mode);
+        return;
+    }
+
+    pendingModeChange = mode;
+    document.getElementById('leave-editing-confirmation').showModal();
+}
+
+function cancelLeaveEditingMode() {
+    document.getElementById('leave-editing-confirmation').close();
+}
+
+function confirmLeaveEditingMode() {
+    const mode = pendingModeChange;
+    document.getElementById('leave-editing-confirmation').close();
+    if (mode) {
+        switchMode(mode);
     }
 }
 
